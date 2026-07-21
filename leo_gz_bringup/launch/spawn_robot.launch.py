@@ -17,38 +17,35 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
-
-
 import os
-
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchContext, LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 import xacro
-
-
-def spawn_robot(context: LaunchContext, namespace: LaunchConfiguration):
+def spawn_robot(
+    context: LaunchContext,
+    namespace: LaunchConfiguration,
+    robot_variant: LaunchConfiguration,
+):
     pkg_project_description = get_package_share_directory("leo_description")
     robot_ns = context.perform_substitution(namespace)
-
+    variant_name = context.perform_substitution(robot_variant)
     robot_desc = xacro.process(
         os.path.join(
             pkg_project_description,
             "urdf",
-            "leo_sim.urdf.xacro",
+            variant_name + ".urdf.xacro",
         ),
         mappings={"robot_ns": robot_ns},
     )
-
     if robot_ns == "":
         robot_gazebo_name = "leo_rover"
         node_name_prefix = ""
     else:
         robot_gazebo_name = "leo_rover_" + robot_ns
         node_name_prefix = robot_ns + "_"
-
     # Launch robot state publisher node
     robot_state_publisher = Node(
         namespace=robot_ns,
@@ -77,7 +74,6 @@ def spawn_robot(context: LaunchContext, namespace: LaunchConfiguration):
             "1.65",
         ],
     )
-
     # Bridge ROS topics and Gazebo messages for establishing communication
     topic_bridge = Node(
         package="ros_gz_bridge",
@@ -99,7 +95,6 @@ def spawn_robot(context: LaunchContext, namespace: LaunchConfiguration):
         ],
         output="screen",
     )
-
     # Camera image bridge
     image_bridge = Node(
         package="ros_gz_image",
@@ -114,17 +109,23 @@ def spawn_robot(context: LaunchContext, namespace: LaunchConfiguration):
         topic_bridge,
         image_bridge,
     ]
-
-
 def generate_launch_description():
     name_argument = DeclareLaunchArgument(
         "robot_ns",
         default_value="",
         description="Robot namespace",
     )
-
+    variant_argument = DeclareLaunchArgument(
+        "robot_variant",
+        default_value="leo_sim",
+        description="Robot URDF variant: leo_sim | leo_sim_flir_spad | leo_sim_zed2",
+    )
     namespace = LaunchConfiguration("robot_ns")
-
+    robot_variant = LaunchConfiguration("robot_variant")
     return LaunchDescription(
-        [name_argument, OpaqueFunction(function=spawn_robot, args=[namespace])]
+        [
+            name_argument,
+            variant_argument,
+            OpaqueFunction(function=spawn_robot, args=[namespace, robot_variant]),
+        ]
     )
