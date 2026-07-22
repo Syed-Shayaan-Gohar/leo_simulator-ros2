@@ -75,19 +75,47 @@ def spawn_robot(
         ],
     )
     # Bridge ROS topics and Gazebo messages for establishing communication
+    bridge_topics = [
+        robot_ns + "/cmd_vel@geometry_msgs/msg/Twist]ignition.msgs.Twist",
+        robot_ns + "/odom@nav_msgs/msg/Odometry[ignition.msgs.Odometry",
+        robot_ns + "/tf@tf2_msgs/msg/TFMessage[ignition.msgs.Pose_V",
+        robot_ns + "/imu/data_raw@sensor_msgs/msg/Imu[ignition.msgs.IMU",
+        robot_ns
+        + "/camera/camera_info@sensor_msgs/msg/CameraInfo[ignition.msgs.CameraInfo",
+        robot_ns + "/joint_states@sensor_msgs/msg/JointState[ignition.msgs.Model",
+    ]
+    image_topics = [robot_ns + "/camera/image_raw"]
+
+    # Additional sensor topics, only bridged when the corresponding
+    # variant's sensors actually exist in the spawned robot.
+    if variant_name == "leo_sim_flir_spad":
+        bridge_topics += [
+            robot_ns
+            + "/flir/camera_info@sensor_msgs/msg/CameraInfo[ignition.msgs.CameraInfo",
+            robot_ns
+            + "/spad/camera_info@sensor_msgs/msg/CameraInfo[ignition.msgs.CameraInfo",
+        ]
+        image_topics += [
+            robot_ns + "/flir/image_raw",
+            robot_ns + "/spad/image_raw",
+        ]
+    elif variant_name == "leo_sim_zed2":
+        bridge_topics += [
+            robot_ns
+            + "/zed2/left/camera_info@sensor_msgs/msg/CameraInfo[ignition.msgs.CameraInfo",
+            robot_ns
+            + "/zed2/right/camera_info@sensor_msgs/msg/CameraInfo[ignition.msgs.CameraInfo",
+        ]
+        image_topics += [
+            robot_ns + "/zed2/left/image_raw",
+            robot_ns + "/zed2/right/image_raw",
+        ]
+
     topic_bridge = Node(
         package="ros_gz_bridge",
         executable="parameter_bridge",
         name=node_name_prefix + "parameter_bridge",
-        arguments=[
-            robot_ns + "/cmd_vel@geometry_msgs/msg/Twist]ignition.msgs.Twist",
-            robot_ns + "/odom@nav_msgs/msg/Odometry[ignition.msgs.Odometry",
-            robot_ns + "/tf@tf2_msgs/msg/TFMessage[ignition.msgs.Pose_V",
-            robot_ns + "/imu/data_raw@sensor_msgs/msg/Imu[ignition.msgs.IMU",
-            robot_ns
-            + "/camera/camera_info@sensor_msgs/msg/CameraInfo[ignition.msgs.CameraInfo",
-            robot_ns + "/joint_states@sensor_msgs/msg/JointState[ignition.msgs.Model",
-        ],
+        arguments=bridge_topics,
         parameters=[
             {
                 "qos_overrides./tf_static.publisher.durability": "transient_local",
@@ -100,7 +128,7 @@ def spawn_robot(
         package="ros_gz_image",
         executable="image_bridge",
         name=node_name_prefix + "image_bridge",
-        arguments=[robot_ns + "/camera/image_raw"],
+        arguments=image_topics,
         output="screen",
     )
     return [
