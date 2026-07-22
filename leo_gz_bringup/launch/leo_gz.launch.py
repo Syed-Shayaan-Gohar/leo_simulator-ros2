@@ -24,7 +24,7 @@ import os
 from ament_index_python.packages import get_package_share_directory
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, SetEnvironmentVariable
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
@@ -80,8 +80,20 @@ def generate_launch_description():
         output="screen",
     )
 
+    # Force rendering onto the discrete NVIDIA GPU instead of the
+    # Intel iGPU (default PRIME behavior on this hybrid-graphics laptop).
+    # Without this, Gazebo's camera sensors silently render on the iGPU
+    # and fall well short of their configured update_rate, worse as more
+    # camera sensors run simultaneously.
+    gpu_offload_1 = SetEnvironmentVariable("__NV_PRIME_RENDER_OFFLOAD", "1")
+    gpu_offload_2 = SetEnvironmentVariable("__GLX_VENDOR_LIBRARY_NAME", "nvidia")
+    gpu_offload_3 = SetEnvironmentVariable("__VK_LAYER_NV_optimus", "NVIDIA_only")
+
     return LaunchDescription(
         [
+            gpu_offload_1,
+            gpu_offload_2,
+            gpu_offload_3,
             sim_world,
             robot_ns,
             gz_sim,
