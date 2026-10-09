@@ -23,12 +23,57 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 
-from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, SetEnvironmentVariable
-from launch.actions import IncludeLaunchDescription
+from launch import LaunchContext, LaunchDescription
+from launch.actions import (
+    DeclareLaunchArgument,
+    ExecuteProcess,
+    IncludeLaunchDescription,
+    OpaqueFunction,
+    SetEnvironmentVariable,
+    TimerAction,
+)
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+
+
+# Solar-elevation-derived light directions (SPICE-HL3 paper, Table/Fig 1):
+#   x = cos(elevation) * cos(45deg), y = cos(elevation) * sin(45deg), z = -sin(elevation)
+# Dawn/Dusk (4 deg) is the lunalab.sdf file's own default and is left alone here.
+# Noon (8 deg) is applied live via the /world/lunalab/light_config service, since
+# duplicating the whole world file risks the two versions drifting out of sync.
+LIGHTING_PRESETS = {
+    "noon": {
+        "direction": "{x: 0.7003, y: 0.7003, z: -0.1392}",
+    },
+}
+
+
+def apply_lighting(context: LaunchContext, lighting: LaunchConfiguration):
+    lighting_name = context.perform_substitution(lighting)
+    if lighting_name not in LIGHTING_PRESETS:
+        return []
+
+    direction = LIGHTING_PRESETS[lighting_name]["direction"]
+    req = (
+        f'name: "sun_light", type: DIRECTIONAL, direction: {direction}, '
+        'diffuse: {r: 1.0, g: 0.953, b: 0.937, a: 1}, '
+        'specular: {r: 0.3, g: 0.3, b: 0.3, a: 1}, '
+        'cast_shadows: true, intensity: 1.0'
+    )
+    return [
+        ExecuteProcess(
+            cmd=[
+                "ign", "service",
+                "-s", "/world/lunalab/light_config",
+                "--reqtype", "ignition.msgs.Light",
+                "--reptype", "ignition.msgs.Boolean",
+                "--timeout", "2000",
+                "--req", req,
+            ],
+            output="screen",
+        )
+    ]
 
 
 def generate_launch_description():
@@ -47,6 +92,17 @@ def generate_launch_description():
         "robot_ns",
         default_value="",
         description="Robot namespace",
+    )
+
+    lighting = DeclareLaunchArgument(
+        "lighting",
+        default_value="dawn_dusk",
+        description="Lighting scenario: dawn_dusk (SDF default, 4 deg) | noon (8 deg)",
+    )
+
+    apply_lighting_action = TimerAction(
+        period=5.0,
+        actions=[OpaqueFunction(function=apply_lighting, args=[LaunchConfiguration("lighting")])],
     )
 
     # Setup to launch the simulator and Gazebo world
@@ -96,8 +152,10 @@ def generate_launch_description():
             gpu_offload_3,
             sim_world,
             robot_ns,
+            lighting,
             gz_sim,
             spawn_robot,
             topic_bridge,
+            apply_lighting_action,
         ]
     )

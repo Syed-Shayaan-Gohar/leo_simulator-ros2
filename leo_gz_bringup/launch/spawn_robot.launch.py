@@ -29,9 +29,14 @@ def spawn_robot(
     namespace: LaunchConfiguration,
     robot_variant: LaunchConfiguration,
 ):
-    pkg_project_description = get_package_share_directory("leo_description")
     robot_ns = context.perform_substitution(namespace)
     variant_name = context.perform_substitution(robot_variant)
+
+    if variant_name.startswith("leo_model1_cad"):
+        pkg_project_description = get_package_share_directory("leo_description_cad")
+    else:
+        pkg_project_description = get_package_share_directory("leo_description")
+
     robot_desc = xacro.process(
         os.path.join(
             pkg_project_description,
@@ -88,7 +93,7 @@ def spawn_robot(
 
     # Additional sensor topics, only bridged when the corresponding
     # variant's sensors actually exist in the spawned robot.
-    if variant_name == "leo_sim_flir_spad":
+    if variant_name in ("leo_sim_flir_spad", "leo_model1_cad_flir_spad"):
         bridge_topics += [
             robot_ns
             + "/flir/camera_info@sensor_msgs/msg/CameraInfo[ignition.msgs.CameraInfo",
